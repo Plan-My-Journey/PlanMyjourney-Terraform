@@ -213,24 +213,6 @@ variable "frontend_acm_certificate_arn" {
   default     = ""
 }
 
-variable "gitops_repo" {
-  description = "GitOps repository name"
-  type        = string
-  default     = "planmyjourney-gitops"
-}
-
-variable "gitops_branch" {
-  description = "GitOps branch reconciled by Flux"
-  type        = string
-  default     = "main"
-}
-
-variable "gitops_path" {
-  description = "Kustomize overlay path in gitops repo"
-  type        = string
-  default     = "kustomize/overlays/prod"
-}
-
 variable "github_repos" {
   description = "GitHub repositories allowed for OIDC (org/repo)"
   type        = list(string)
@@ -240,4 +222,10 @@ variable "github_repos" {
     "Plan-My-Journey/planmyjourney-gitops",
     "Plan-My-Journey/planmyjourney-workflows",
   ]
+}
+
+variable "enable_legacy_alb" {
+  description = "Create the legacy Terraform ALB (disabled when using Envoy Gateway NLB)"
+  type        = bool
+  default     = false
 }

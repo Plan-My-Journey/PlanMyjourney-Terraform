@@ -42,12 +42,28 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
-  aliases             = [var.domain_name]
+  aliases             = [var.domain_name, "www.${var.domain_name}"]
   price_class         = "PriceClass_100"
+  web_acl_id          = aws_wafv2_web_acl.cloudfront.arn
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name

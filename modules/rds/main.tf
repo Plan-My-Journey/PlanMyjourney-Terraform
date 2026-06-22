@@ -157,7 +157,7 @@ resource "aws_db_instance" "main" {
   username = var.db_username
   password = jsondecode(data.aws_secretsmanager_secret_version.db_password.secret_string)["password"]
 
-  multi_az            = false
+  multi_az            = var.environment == "prod"
   publicly_accessible = false
 
   db_subnet_group_name   = aws_db_subnet_group.main.name

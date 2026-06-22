@@ -15,7 +15,6 @@ Organization: [Plan-My-Journey](https://github.com/orgs/Plan-My-Journey)
 | `modules/ecr` | Container registries |
 | `modules/cognito` | User Pool, App Client, Hosted UI domain |
 | `modules/frontend-hosting` | S3 + CloudFront + ACM |
-| `modules/gitops` | CodeConnections for Flux GitOps |
 | `modules/monitoring` | CloudWatch, SNS alarms |
 | `modules/iam` | GitHub OIDC roles |
 
@@ -31,6 +30,6 @@ terraform plan -var-file=environments/prod.tfvars
 
 S3 backend with DynamoDB locking (`backend.tf`).
 
-## Tagging
+## GitOps
 
-All resources tagged with `Environment`, `Owner`, `Project`, `ManagedBy`.
+Kubernetes deployments are managed by **ArgoCD** from the [planmyjourney-gitops](https://github.com/Plan-My-Journey/planmyjourney-gitops) repository — not Flux.

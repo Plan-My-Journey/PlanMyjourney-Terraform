@@ -41,8 +41,8 @@ output "ecr_repository_urls" {
 }
 
 output "alb_dns_name" {
-  description = "Application Load Balancer DNS name"
-  value       = module.alb.alb_dns_name
+  description = "Application Load Balancer DNS name (empty when enable_legacy_alb=false)"
+  value       = var.enable_legacy_alb ? module.alb[0].alb_dns_name : ""
 }
 
 output "sns_topic_arn" {
@@ -121,17 +121,37 @@ output "frontend_url" {
   value       = module.frontend_hosting.frontend_url
 }
 
-output "gitops_connection_arn" {
-  description = "CodeConnections ARN for Flux GitOps"
-  value       = module.gitops.github_connection_arn
-}
-
-output "gitops_repo_url" {
-  description = "GitOps repository URL"
-  value       = module.gitops.gitops_repo_url
-}
-
 output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN"
   value       = module.eks.oidc_provider_arn
+}
+
+output "ai_jobs_queue_url" {
+  description = "SQS queue URL for AI async jobs"
+  value       = module.sqs.ai_jobs_queue_url
+}
+
+output "ai_jobs_queue_arn" {
+  description = "SQS queue ARN for AI async jobs"
+  value       = module.sqs.ai_jobs_queue_arn
+}
+
+output "ai_jobs_table_name" {
+  description = "DynamoDB table for AI job status"
+  value       = module.sqs.ai_jobs_table_name
+}
+
+output "karpenter_controller_role_arn" {
+  description = "Karpenter controller IRSA role ARN"
+  value       = module.karpenter.controller_role_arn
+}
+
+output "karpenter_node_role_arn" {
+  description = "Karpenter node IAM role ARN"
+  value       = module.karpenter.node_role_arn
+}
+
+output "karpenter_interruption_queue_name" {
+  description = "Karpenter spot interruption SQS queue name"
+  value       = module.karpenter.interruption_queue_name
 }

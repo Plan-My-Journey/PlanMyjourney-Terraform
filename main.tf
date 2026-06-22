@@ -95,6 +95,7 @@ module "rds" {
 }
 
 module "alb" {
+  count  = var.enable_legacy_alb ? 1 : 0
   source = "./modules/alb"
 
   project_name       = var.project_name
@@ -121,13 +122,13 @@ module "monitoring" {
   kms_key_arn             = module.secrets.kms_key_arn
   sns_topic_email         = var.alert_email
   enable_rds_alarms       = true
-  enable_alb_alarms       = true
+  enable_alb_alarms       = var.enable_legacy_alb
   rds_instance_id         = module.rds.db_instance_id
-  alb_arn_suffix          = module.alb.alb_arn_suffix
-  target_group_arn_suffix = module.alb.target_group_arn_suffix
+  alb_arn_suffix          = var.enable_legacy_alb ? module.alb[0].alb_arn_suffix : ""
+  target_group_arn_suffix = var.enable_legacy_alb ? module.alb[0].target_group_arn_suffix : ""
   tags                    = local.common_tags
 
-  depends_on = [module.secrets, module.rds, module.alb]
+  depends_on = [module.secrets, module.rds]
 }
 
 module "governance" {
@@ -171,6 +172,34 @@ module "irsa" {
   oidc_provider_arn = module.eks.oidc_provider_arn
   oidc_issuer       = replace(module.eks.oidc_issuer_url, "https://", "")
   namespace         = var.k8s_namespace
+  sqs_queue_arn     = module.sqs.ai_jobs_queue_arn
+  jobs_table_arn    = module.sqs.ai_jobs_table_arn
+  tags              = local.common_tags
+
+  depends_on = [module.eks, module.sqs]
+}
+
+module "sqs" {
+  source = "./modules/sqs"
+
+  project_name = var.project_name
+  environment  = var.environment
+  kms_key_arn  = module.secrets.kms_key_arn
+  tags         = local.common_tags
+
+  depends_on = [module.secrets]
+}
+
+module "karpenter" {
+  source = "./modules/karpenter"
+
+  project_name      = var.project_name
+  environment       = var.environment
+  cluster_name      = var.cluster_name
+  aws_region        = var.aws_region
+  account_id        = local.account_id
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_issuer       = replace(module.eks.oidc_issuer_url, "https://", "")
   tags              = local.common_tags
 
   depends_on = [module.eks]
@@ -196,21 +225,4 @@ module "frontend_hosting" {
   domain_name         = var.frontend_domain
   acm_certificate_arn = var.frontend_acm_certificate_arn
   tags                = local.common_tags
-}
-
-module "gitops" {
-  source = "./modules/gitops"
-
-  project_name      = var.project_name
-  environment       = var.environment
-  github_org        = var.github_org
-  gitops_repo       = var.gitops_repo
-  gitops_branch     = var.gitops_branch
-  gitops_path       = var.gitops_path
-  cluster_name      = var.cluster_name
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  oidc_issuer       = replace(module.eks.oidc_issuer_url, "https://", "")
-  tags              = local.common_tags
-
-  depends_on = [module.eks]
 }
