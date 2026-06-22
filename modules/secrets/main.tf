@@ -178,7 +178,7 @@ resource "aws_secretsmanager_secret" "github_token" {
 # ---------------------------------------------------------------------------
 resource "aws_secretsmanager_secret" "third_party_apis" {
   name                    = "${var.project_name}/third-party-apis/${var.environment}"
-  description             = "API keys for GROQ, OpenWeather, Geoapify, Google Maps"
+  description             = "Geoapify API key for maps, geocoding, routing, and places"
   kms_key_id              = aws_kms_key.main.arn
   recovery_window_in_days = 30
 
@@ -191,10 +191,30 @@ resource "aws_secretsmanager_secret" "third_party_apis" {
 resource "aws_secretsmanager_secret_version" "third_party_apis_placeholder" {
   secret_id = aws_secretsmanager_secret.third_party_apis.id
   secret_string = jsonencode({
-    GROQ_API_KEY        = "REPLACE_ME"
+    GEOAPIFY_API_KEY = "REPLACE_ME"
+  })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+resource "aws_secretsmanager_secret" "openweather_api_key" {
+  name                    = "${var.project_name}/openweather-api-key/${var.environment}"
+  description             = "OpenWeather API key for weather forecasts"
+  kms_key_id              = aws_kms_key.main.arn
+  recovery_window_in_days = 30
+
+  tags = merge(var.tags, {
+    Name        = "${var.project_name}-openweather-api-key-${var.environment}"
+    Environment = var.environment
+  })
+}
+
+resource "aws_secretsmanager_secret_version" "openweather_api_key_placeholder" {
+  secret_id = aws_secretsmanager_secret.openweather_api_key.id
+  secret_string = jsonencode({
     OPENWEATHER_API_KEY = "REPLACE_ME"
-    GEOAPIFY_API_KEY    = "REPLACE_ME"
-    GOOGLE_MAPS_API_KEY = "REPLACE_ME"
   })
 
   lifecycle {
