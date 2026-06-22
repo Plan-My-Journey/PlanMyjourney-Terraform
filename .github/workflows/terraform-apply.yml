@@ -1,0 +1,45 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.tf"
+      - "environments/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.tf"
+      - "environments/**"
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        default: prod
+      action:
+        type: choice
+        options: [plan, apply]
+        default: plan
+
+jobs:
+  terraform-dev:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    uses: Plan-My-Journey/PlanMyJourney-Workflows/.github/workflows/reusable-terraform.yml@main
+    with:
+      environment: dev
+      action: plan
+      tfvars_file: environments/dev.tfvars
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ai-travel-github-actions-dev
+
+  terraform-prod:
+    uses: Plan-My-Journey/PlanMyJourney-Workflows/.github/workflows/reusable-terraform.yml@main
+    with:
+      environment: production
+      action: ${{ github.event_name == 'push' && 'apply' || (github.event.inputs.action || 'plan') }}
+      tfvars_file: environments/prod.tfvars
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_ROLE_ARN: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ai-travel-github-actions-prod
