@@ -9,7 +9,7 @@ Live domain: **invest-iq.online** (audit templates referencing planmyjourney.com
 | Component | RTO | RPO |
 |-----------|-----|-----|
 | Frontend (CloudFront + S3) | 15 min | 5 min |
-| API (EKS + Envoy Gateway NLB) | 30 min | 0 (stateless) |
+| API (EKS + KGateway NLB) | 30 min | 0 (stateless) |
 | Database (RDS PostgreSQL) | 1 hour | 5 min |
 | Async jobs (SQS + DynamoDB) | 30 min | 0 (queue retained) |
 | Overall | 1 hour | 5 min |

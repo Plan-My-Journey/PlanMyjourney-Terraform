@@ -225,7 +225,7 @@ variable "github_repos" {
 }
 
 variable "enable_legacy_alb" {
-  description = "Create the legacy Terraform ALB (disabled when using Envoy Gateway NLB)"
+  description = "Create the legacy Terraform ALB (disabled when using KGateway NLB)"
   type        = bool
   default     = false
 }
