@@ -106,21 +106,6 @@ output "cognito_issuer_url" {
   value       = module.cognito.issuer_url
 }
 
-output "frontend_bucket_name" {
-  description = "S3 bucket for React frontend"
-  value       = module.frontend_hosting.bucket_name
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID"
-  value       = module.frontend_hosting.cloudfront_distribution_id
-}
-
-output "frontend_url" {
-  description = "HTTPS frontend URL"
-  value       = module.frontend_hosting.frontend_url
-}
-
 output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN"
   value       = module.eks.oidc_provider_arn

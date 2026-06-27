@@ -217,12 +217,6 @@ module "cognito" {
   tags            = local.common_tags
 }
 
-module "frontend_hosting" {
-  source = "./modules/frontend-hosting"
-
-  project_name        = var.project_name
-  environment         = var.environment
-  domain_name         = var.frontend_domain
-  acm_certificate_arn = var.frontend_acm_certificate_arn
-  tags                = local.common_tags
-}
+# frontend_hosting (S3 + CloudFront) removed: the frontend is now served from the
+# in-cluster pod via the KGateway NLB (HTTPRoute on invest-iq.online). The module
+# remains under modules/frontend-hosting but is intentionally no longer wired.
