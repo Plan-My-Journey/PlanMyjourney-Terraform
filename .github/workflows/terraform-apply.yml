@@ -1,27 +1,30 @@
 name: Terraform
 
-# dev branch push: fmt → validate → plan → apply (automatic)
-# main branch push: fmt → validate → plan → apply (production approval)
-# pull_request: plan only
+# Terraform manages PRODUCTION infrastructure only.
+#   push to main         -> fmt -> validate -> plan -> apply  (prod, gated by the
+#                           `production` GitHub environment)
+#   pull_request to main -> fmt -> validate -> plan           (no apply)
+#
+# There is no separate DEV AWS stack: "dev" is the `dev` Kubernetes namespace in
+# the shared `ai-travel-prod` cluster and is managed by GitOps/Helm (ArgoCD), NOT
+# Terraform. Hence there is no dev Terraform lane and no dev/terraform.tfstate.
 
 on:
   pull_request:
-    branches: [dev, main]
+    branches: [main]
     paths:
       - "**/*.tf"
-      - "environments/**"
+      - "environments/prod.tfvars"
       - ".github/workflows/terraform-apply.yml"
   push:
-    branches: [dev, main]
+    branches: [main]
     paths:
       - "**/*.tf"
-      - "environments/**"
+      - "environments/prod.tfvars"
       - ".github/workflows/terraform-apply.yml"
 
-# Granted at the caller so the reusable workflow's jobs can request them.
-# A reusable workflow's job permissions cannot exceed what the caller grants:
-#   _terraform.yml plan job  -> id-token: write, contents: read, pull-requests: write
-#   _terraform.yml apply job -> id-token: write, contents: read
+# Granted at the caller so the reusable workflow's jobs can request them
+# (a reusable workflow's job permissions cannot exceed what the caller grants).
 permissions:
   id-token: write # OIDC federation for AWS (aws-actions/configure-aws-credentials)
   contents: read # checkout
@@ -32,24 +35,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  terraform-dev:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/dev') || (github.event_name == 'pull_request' && github.base_ref == 'dev')
-    uses: Plan-My-Journey/PlanMyJourney-Workflows/.github/workflows/_terraform.yml@main
-    with:
-      environment: dev
-      action: ${{ github.event_name == 'push' && 'apply' || 'plan' }}
-      tfvars_file: environments/dev.tfvars
-    secrets:
-      AWS_DEPLOY_ROLE_ARN_DEV: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
-      AWS_DEPLOY_ROLE_ARN_PROD: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
-
-  terraform-prod:
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'pull_request' && github.base_ref == 'main')
+  terraform:
     uses: Plan-My-Journey/PlanMyJourney-Workflows/.github/workflows/_terraform.yml@main
     with:
       environment: production
       action: ${{ github.event_name == 'push' && 'apply' || 'plan' }}
       tfvars_file: environments/prod.tfvars
     secrets:
-      AWS_DEPLOY_ROLE_ARN_DEV: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
       AWS_DEPLOY_ROLE_ARN_PROD: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
