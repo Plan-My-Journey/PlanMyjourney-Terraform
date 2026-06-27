@@ -29,6 +29,14 @@ resource "aws_dynamodb_table" "finops_reports" {
     type = "S"
   }
 
+  # Present in live production; declared here so Terraform adopts (not destroys) it.
+  global_secondary_index {
+    name            = "metric_type-execution_date-index"
+    hash_key        = "metric_type"
+    range_key       = "execution_date"
+    projection_type = "ALL"
+  }
+
   ttl {
     attribute_name = "ttl"
     enabled        = true
@@ -38,10 +46,8 @@ resource "aws_dynamodb_table" "finops_reports" {
     enabled = true
   }
 
-  server_side_encryption {
-    enabled     = true
-    kms_key_arn = var.kms_key_arn != "" ? var.kms_key_arn : null
-  }
+  # Live table uses the DynamoDB default (AWS-owned) encryption — no explicit
+  # SSE block, matching production. A CMK can be adopted later as a deliberate change.
 
   tags = merge(local.common_tags, {
     Name    = var.dynamodb_table_name

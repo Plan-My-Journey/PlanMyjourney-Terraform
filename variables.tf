@@ -111,6 +111,12 @@ variable "db_backup_retention_days" {
   default     = 30
 }
 
+variable "enable_rds_multi_az" {
+  description = "Enable RDS Multi-AZ. Default false to match current single-AZ production; enable in a planned maintenance window."
+  type        = bool
+  default     = false
+}
+
 variable "ecr_repositories" {
   description = "List of ECR repository names to create"
   type        = list(string)

@@ -58,6 +58,18 @@ variable "eks_security_group_id" {
   description = "Security group ID of the EKS cluster/nodes allowed to connect"
 }
 
+variable "eks_cluster_security_group_id" {
+  type        = string
+  default     = ""
+  description = "EKS auto-managed cluster security group (attached to pod/node ENIs) allowed to connect to RDS"
+}
+
+variable "multi_az" {
+  type        = bool
+  default     = false
+  description = "Enable RDS Multi-AZ. Gated off to match current single-AZ prod; enable in a planned maintenance window."
+}
+
 variable "kms_key_arn" {
   type        = string
   description = "ARN of the KMS key for RDS encryption"

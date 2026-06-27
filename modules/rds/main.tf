@@ -11,11 +11,14 @@ resource "aws_security_group" "rds" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "PostgreSQL from EKS nodes"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [var.eks_security_group_id]
+    description = "PostgreSQL from EKS nodes"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    # Both the Terraform-managed EKS cluster SG and the EKS auto-managed cluster
+    # SG (the one attached to pod/node ENIs) must be allowed — pods connect via
+    # the latter. compact() drops the second if not wired (e.g. non-prod).
+    security_groups = compact([var.eks_security_group_id, var.eks_cluster_security_group_id])
   }
 
   egress {
@@ -157,7 +160,7 @@ resource "aws_db_instance" "main" {
   username = var.db_username
   password = jsondecode(data.aws_secretsmanager_secret_version.db_password.secret_string)["password"]
 
-  multi_az            = var.environment == "prod"
+  multi_az            = var.multi_az
   publicly_accessible = false
 
   db_subnet_group_name   = aws_db_subnet_group.main.name

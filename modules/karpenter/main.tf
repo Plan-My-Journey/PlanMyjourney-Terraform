@@ -53,9 +53,27 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "ec2:DeleteLaunchTemplate",
       "ec2:RunInstances",
       "ec2:TerminateInstances",
-      "iam:PassRole",
       "pricing:GetProducts",
       "ssm:GetParameter",
+      "eks:DescribeCluster",
+    ]
+    resources = ["*"]
+  }
+
+  # Karpenter v1 manages EC2 instance profiles natively. These permissions exist
+  # in the live production policy and node provisioning depends on them — matched
+  # here so Terraform adopts the policy without stripping required permissions.
+  statement {
+    sid    = "KarpenterInstanceProfile"
+    effect = "Allow"
+    actions = [
+      "iam:CreateInstanceProfile",
+      "iam:AddRoleToInstanceProfile",
+      "iam:RemoveRoleFromInstanceProfile",
+      "iam:DeleteInstanceProfile",
+      "iam:GetInstanceProfile",
+      "iam:TagInstanceProfile",
+      "iam:PassRole",
     ]
     resources = ["*"]
   }
@@ -70,13 +88,6 @@ data "aws_iam_policy_document" "karpenter_controller" {
       "sqs:ReceiveMessage",
     ]
     resources = [aws_sqs_queue.karpenter_interruption.arn]
-  }
-
-  statement {
-    sid       = "KarpenterNodeRolePass"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = [aws_iam_role.karpenter_node.arn]
   }
 }
 
@@ -100,6 +111,12 @@ resource "aws_sqs_queue" "karpenter_interruption" {
     Name        = "${local.name_prefix}-karpenter-interruption"
     Environment = var.environment
   })
+
+  lifecycle {
+    # Live queue created out-of-band with a 1 MiB max_message_size the provider
+    # schema cannot express (cap 256 KiB). Adopt the live value.
+    ignore_changes = [max_message_size]
+  }
 }
 
 resource "aws_iam_role" "karpenter_node" {

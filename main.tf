@@ -76,22 +76,24 @@ module "eks" {
 module "rds" {
   source = "./modules/rds"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  instance_class         = var.db_instance_class
-  allocated_storage      = var.db_allocated_storage
-  max_allocated_storage  = var.db_max_allocated_storage
-  db_name                = var.db_name
-  db_username            = var.db_username
-  db_password_secret_arn = module.secrets.rds_password_secret_arn
-  database_subnet_ids    = module.vpc.database_subnet_ids
-  vpc_id                 = module.vpc.vpc_id
-  eks_security_group_id  = module.vpc.eks_cluster_security_group_id
-  kms_key_arn            = module.secrets.kms_key_arn
-  backup_retention_days  = var.db_backup_retention_days
-  tags                   = local.common_tags
+  project_name                  = var.project_name
+  environment                   = var.environment
+  instance_class                = var.db_instance_class
+  allocated_storage             = var.db_allocated_storage
+  max_allocated_storage         = var.db_max_allocated_storage
+  db_name                       = var.db_name
+  db_username                   = var.db_username
+  db_password_secret_arn        = module.secrets.rds_password_secret_arn
+  database_subnet_ids           = module.vpc.database_subnet_ids
+  vpc_id                        = module.vpc.vpc_id
+  eks_security_group_id         = module.vpc.eks_cluster_security_group_id
+  eks_cluster_security_group_id = module.eks.cluster_security_group_id
+  kms_key_arn                   = module.secrets.kms_key_arn
+  backup_retention_days         = var.db_backup_retention_days
+  multi_az                      = var.enable_rds_multi_az
+  tags                          = local.common_tags
 
-  depends_on = [module.vpc, module.secrets]
+  depends_on = [module.vpc, module.secrets, module.eks]
 }
 
 module "alb" {
