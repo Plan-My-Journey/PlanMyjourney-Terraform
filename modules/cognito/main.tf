@@ -51,6 +51,13 @@ resource "aws_cognito_user_pool" "main" {
     Name        = "${var.project_name}-cognito-pool-${var.environment}"
     Environment = var.environment
   })
+
+  lifecycle {
+    # Cognito schema attributes are immutable after pool creation. Cognito returns
+    # additional default fields (string/number constraints) that aren't declared in
+    # config, producing a perpetual diff. Ignore schema to adopt the live pool as-is.
+    ignore_changes = [schema]
+  }
 }
 
 resource "aws_cognito_user_pool_domain" "main" {

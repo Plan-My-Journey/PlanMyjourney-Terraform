@@ -38,7 +38,9 @@ resource "aws_dynamodb_table" "finops_reports" {
   }
 
   ttl {
-    attribute_name = "ttl"
+    # Live production table has TTL on "expiration_time" — matched here so
+    # Terraform adopts it instead of trying to switch the TTL attribute.
+    attribute_name = "expiration_time"
     enabled        = true
   }
 
