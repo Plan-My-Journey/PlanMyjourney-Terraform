@@ -11,10 +11,9 @@ output "sns_topic_name" {
 output "log_group_names" {
   description = "Map of CloudWatch log group names created by this module"
   value = {
-    eks        = aws_cloudwatch_log_group.eks.name
-    rds        = aws_cloudwatch_log_group.rds.name
-    lambda     = aws_cloudwatch_log_group.lambda_finops.name
-    cloudtrail = aws_cloudwatch_log_group.cloudtrail.name
+    eks    = aws_cloudwatch_log_group.eks.name
+    rds    = aws_cloudwatch_log_group.rds.name
+    lambda = aws_cloudwatch_log_group.lambda_finops.name
   }
 }
 

@@ -417,22 +417,13 @@ resource "aws_iam_role_policy" "github_actions_inline" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
+          "s3:DeleteObject",
           "s3:ListBucket"
         ]
         Resource = [
           "arn:aws:s3:::${var.project_name}-terraform-state-${var.account_id}",
           "arn:aws:s3:::${var.project_name}-terraform-state-${var.account_id}/*"
         ]
-      },
-      {
-        Sid    = "DynamoDBTerraformLock"
-        Effect = "Allow"
-        Action = [
-          "dynamodb:GetItem",
-          "dynamodb:PutItem",
-          "dynamodb:DeleteItem"
-        ]
-        Resource = "arn:aws:dynamodb:${var.aws_region}:${var.account_id}:table/${var.project_name}-terraform-locks"
       },
       {
         Sid    = "STSCallerIdentity"

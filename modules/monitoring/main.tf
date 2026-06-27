@@ -60,16 +60,6 @@ resource "aws_cloudwatch_log_group" "lambda_finops" {
   })
 }
 
-resource "aws_cloudwatch_log_group" "cloudtrail" {
-  name              = "/aws/cloudtrail/${var.project_name}"
-  retention_in_days = 30
-  kms_key_id        = var.kms_key_arn
-
-  tags = merge(local.common_tags, {
-    Name = "/aws/cloudtrail/${var.project_name}"
-  })
-}
-
 # ---------------------------------------------------------------------------
 # RDS CloudWatch Alarms (conditional)
 # ---------------------------------------------------------------------------

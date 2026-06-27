@@ -167,20 +167,6 @@ resource "aws_route_table_association" "database" {
 }
 
 # ==============================================================================
-# RDS DB Subnet Group
-# ==============================================================================
-
-resource "aws_db_subnet_group" "main" {
-  name        = "${local.name_prefix}-db-subnet-group"
-  description = "Database subnet group for ${local.name_prefix}"
-  subnet_ids  = aws_subnet.database[*].id
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-db-subnet-group"
-  })
-}
-
-# ==============================================================================
 # Security Groups
 # ==============================================================================
 
@@ -253,36 +239,6 @@ resource "aws_security_group" "eks_cluster" {
 
   tags = merge(var.tags, {
     Name = "${local.name_prefix}-eks-cluster-sg"
-  })
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_security_group" "rds" {
-  name        = "${local.name_prefix}-rds-sg"
-  description = "Security group for RDS PostgreSQL - inbound from EKS only"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "PostgreSQL from EKS nodes"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.eks_cluster.id]
-  }
-
-  egress {
-    description = "No outbound required"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = [var.vpc_cidr]
-  }
-
-  tags = merge(var.tags, {
-    Name = "${local.name_prefix}-rds-sg"
   })
 
   lifecycle {
