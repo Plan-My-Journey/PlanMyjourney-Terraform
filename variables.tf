@@ -222,11 +222,14 @@ variable "frontend_acm_certificate_arn" {
 variable "github_repos" {
   description = "GitHub repositories allowed for OIDC (org/repo)"
   type        = list(string)
+  # MUST match the repositories' canonical case — the GitHub OIDC `sub` claim is
+  # case-sensitive and AWS IAM StringLike matching is case-sensitive. Lowercase
+  # values cause "Not authorized to perform sts:AssumeRoleWithWebIdentity".
   default = [
-    "Plan-My-Journey/planmyjourney-app",
-    "Plan-My-Journey/planmyjourney-terraform",
-    "Plan-My-Journey/planmyjourney-gitops",
-    "Plan-My-Journey/planmyjourney-workflows",
+    "Plan-My-Journey/PlanMyJourney-App",
+    "Plan-My-Journey/PlanMyjourney-Terraform",
+    "Plan-My-Journey/PlanMyJourney-Gitops",
+    "Plan-My-Journey/PlanMyJourney-Workflows",
   ]
 }
 
