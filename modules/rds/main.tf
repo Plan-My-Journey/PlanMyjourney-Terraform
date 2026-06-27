@@ -192,5 +192,12 @@ resource "aws_db_instance" "main" {
   })
 
   depends_on = [aws_iam_role_policy_attachment.rds_monitoring]
+
+  lifecycle {
+    # The master password is rotated/managed out-of-band (Secrets Manager +
+    # in-cluster k8s secret). Terraform must NOT reset it on every apply, which
+    # would risk breaking live DB connectivity. Adopt the live value as-is.
+    ignore_changes = [password]
+  }
 }
 

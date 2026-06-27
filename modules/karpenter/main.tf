@@ -73,9 +73,9 @@ data "aws_iam_policy_document" "karpenter_controller" {
   }
 
   statement {
-    sid    = "KarpenterNodeRolePass"
-    effect = "Allow"
-    actions = ["iam:PassRole"]
+    sid       = "KarpenterNodeRolePass"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
     resources = [aws_iam_role.karpenter_node.arn]
   }
 }

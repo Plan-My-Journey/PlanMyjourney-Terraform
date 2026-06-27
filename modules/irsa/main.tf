@@ -47,6 +47,12 @@ variable "jobs_table_arn" {
   default     = ""
 }
 
+variable "enable_async_jobs" {
+  description = "Create the SQS/jobs IRSA policies + attachments. Gated on a static bool (not the computed queue/table ARN) so count/for_each stay known at plan time."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   type = map(string)
 }
@@ -100,7 +106,7 @@ data "aws_iam_policy_document" "assume_role" {
       variable = "${var.oidc_issuer}:sub"
       values = flatten([
         for ns in distinct(concat([var.namespace], var.additional_namespaces)) : [
-          for svc in local.services : "system:serviceaccount:${ns}:${svc.value.sa_name}"
+          for svc in local.services : "system:serviceaccount:${ns}:${svc.sa_name}"
         ]
       ])
     }
@@ -182,7 +188,7 @@ data "aws_iam_policy_document" "sqs_publish" {
 }
 
 resource "aws_iam_policy" "sqs_publish" {
-  count  = var.sqs_queue_arn != "" ? 1 : 0
+  count  = var.enable_async_jobs ? 1 : 0
   name   = "${var.project_name}-sqs-publish-${var.environment}"
   policy = data.aws_iam_policy_document.sqs_publish.json
   tags   = var.tags
@@ -204,7 +210,7 @@ data "aws_iam_policy_document" "sqs_consume" {
 }
 
 resource "aws_iam_policy" "sqs_consume" {
-  count  = var.sqs_queue_arn != "" ? 1 : 0
+  count  = var.enable_async_jobs ? 1 : 0
   name   = "${var.project_name}-sqs-consume-${var.environment}"
   policy = data.aws_iam_policy_document.sqs_consume.json
   tags   = var.tags
@@ -228,7 +234,7 @@ data "aws_iam_policy_document" "jobs_store" {
 }
 
 resource "aws_iam_policy" "jobs_store" {
-  count  = var.jobs_table_arn != "" ? 1 : 0
+  count  = var.enable_async_jobs ? 1 : 0
   name   = "${var.project_name}-jobs-store-${var.environment}"
   policy = data.aws_iam_policy_document.jobs_store.json
   tags   = var.tags
@@ -249,21 +255,21 @@ resource "aws_iam_role_policy_attachment" "secrets" {
 }
 
 resource "aws_iam_role_policy_attachment" "sqs_publish" {
-  for_each = var.sqs_queue_arn != "" ? { for k, v in local.services : k => v if contains(v.policies, "sqs_publish") } : {}
+  for_each = var.enable_async_jobs ? { for k, v in local.services : k => v if contains(v.policies, "sqs_publish") } : {}
 
   role       = aws_iam_role.service[each.key].name
   policy_arn = aws_iam_policy.sqs_publish[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "sqs_consume" {
-  for_each = var.sqs_queue_arn != "" ? { for k, v in local.services : k => v if contains(v.policies, "sqs_consume") } : {}
+  for_each = var.enable_async_jobs ? { for k, v in local.services : k => v if contains(v.policies, "sqs_consume") } : {}
 
   role       = aws_iam_role.service[each.key].name
   policy_arn = aws_iam_policy.sqs_consume[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "jobs_store" {
-  for_each = var.jobs_table_arn != "" ? { for k, v in local.services : k => v if contains(v.policies, "jobs_store") } : {}
+  for_each = var.enable_async_jobs ? { for k, v in local.services : k => v if contains(v.policies, "jobs_store") } : {}
 
   role       = aws_iam_role.service[each.key].name
   policy_arn = aws_iam_policy.jobs_store[0].arn

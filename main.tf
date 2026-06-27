@@ -174,6 +174,7 @@ module "irsa" {
   namespace         = var.k8s_namespace
   sqs_queue_arn     = module.sqs.ai_jobs_queue_arn
   jobs_table_arn    = module.sqs.ai_jobs_table_arn
+  enable_async_jobs = true
   tags              = local.common_tags
 
   depends_on = [module.eks, module.sqs]
