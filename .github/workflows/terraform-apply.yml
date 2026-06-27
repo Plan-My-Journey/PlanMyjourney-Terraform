@@ -18,6 +18,15 @@ on:
       - "environments/**"
       - ".github/workflows/terraform-apply.yml"
 
+# Granted at the caller so the reusable workflow's jobs can request them.
+# A reusable workflow's job permissions cannot exceed what the caller grants:
+#   _terraform.yml plan job  -> id-token: write, contents: read, pull-requests: write
+#   _terraform.yml apply job -> id-token: write, contents: read
+permissions:
+  id-token: write # OIDC federation for AWS (aws-actions/configure-aws-credentials)
+  contents: read # checkout
+  pull-requests: write # plan job (PR plan output / comment scope)
+
 concurrency:
   group: terraform-${{ github.ref }}
   cancel-in-progress: false
