@@ -194,8 +194,8 @@ module "sqs" {
   depends_on = [module.secrets]
 }
 
-module "karpenter" {
-  source = "./modules/karpenter"
+module "cluster_autoscaler" {
+  source = "./modules/cluster-autoscaler"
 
   project_name      = var.project_name
   environment       = var.environment

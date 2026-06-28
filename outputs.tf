@@ -126,17 +126,7 @@ output "ai_jobs_table_name" {
   value       = module.sqs.ai_jobs_table_name
 }
 
-output "karpenter_controller_role_arn" {
-  description = "Karpenter controller IRSA role ARN"
-  value       = module.karpenter.controller_role_arn
-}
-
-output "karpenter_node_role_arn" {
-  description = "Karpenter node IAM role ARN"
-  value       = module.karpenter.node_role_arn
-}
-
-output "karpenter_interruption_queue_name" {
-  description = "Karpenter spot interruption SQS queue name"
-  value       = module.karpenter.interruption_queue_name
+output "cluster_autoscaler_role_arn" {
+  description = "Cluster Autoscaler IRSA role ARN"
+  value       = module.cluster_autoscaler.role_arn
 }
