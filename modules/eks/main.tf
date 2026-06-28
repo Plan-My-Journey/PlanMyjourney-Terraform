@@ -92,8 +92,8 @@ resource "aws_eks_node_group" "workers" {
   tags = merge(var.tags, {
     Name = "${var.cluster_name}-workers"
     # Required for Cluster Autoscaler auto-discovery
-    "k8s.io/cluster-autoscaler/enabled"              = "true"
-    "k8s.io/cluster-autoscaler/${var.cluster_name}"  = "owned"
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
   })
 
   lifecycle {
