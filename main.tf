@@ -1,6 +1,7 @@
 # ==============================================================================
 # AI-Travel-Planner — Root Terraform Configuration
 # Region: us-east-1 | Environment: prod
+# CI pipeline revalidated 2026-06-28 (post repository migration).
 # ==============================================================================
 
 module "secrets" {
