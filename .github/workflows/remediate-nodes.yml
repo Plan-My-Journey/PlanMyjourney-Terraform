@@ -57,8 +57,22 @@ jobs:
           echo "=== Nodes before cleanup ==="
           kubectl get nodes
           echo ""
-          echo "Deleting NotReady nodes..."
-          kubectl get nodes --no-headers | awk '$2=="NotReady" {print $1}' | xargs -r kubectl delete node --grace-period=0
+          echo "Removing finalizers and force-deleting NotReady nodes..."
+          NOT_READY=$(kubectl get nodes --no-headers | awk '$2=="NotReady" {print $1}')
+          if [ -z "$NOT_READY" ]; then
+            echo "No NotReady nodes found."
+          else
+            for NODE in $NOT_READY; do
+              echo "Processing node: $NODE"
+              # Remove all finalizers so deletion doesn't hang
+              kubectl patch node "$NODE" \
+                -p '{"metadata":{"finalizers":[]}}' \
+                --type=merge 2>/dev/null || true
+              # Force delete the node object
+              kubectl delete node "$NODE" --force --grace-period=0 2>/dev/null || true
+              echo "Deleted: $NODE"
+            done
+          fi
           echo ""
           echo "=== Nodes after cleanup ==="
           kubectl get nodes
