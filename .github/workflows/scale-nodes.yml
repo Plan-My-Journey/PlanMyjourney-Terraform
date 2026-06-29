@@ -1,0 +1,62 @@
+name: Scale Node Group
+
+on:
+  workflow_dispatch:
+    inputs:
+      desired:
+        description: "Desired node count"
+        required: true
+        default: "5"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  scale:
+    name: scale ASG
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Scale node group
+        run: |
+          ASG_NAME=$(aws eks describe-nodegroup \
+            --cluster-name ai-travel-prod \
+            --nodegroup-name ai-travel-prod-workers \
+            --query 'nodegroup.resources.autoScalingGroups[0].name' \
+            --output text)
+          echo "ASG: $ASG_NAME"
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name "$ASG_NAME" \
+            --desired-capacity ${{ inputs.desired }} \
+            --max-size 6
+          echo "Scaled to ${{ inputs.desired }} desired nodes."
+
+      - name: Wait for new node
+        run: |
+          echo "Waiting for nodes to be Ready..."
+          for i in $(seq 1 20); do
+            READY=$(kubectl get nodes --no-headers | grep -c " Ready " || true)
+            echo "  Ready: $READY"
+            [ "$READY" -ge "${{ inputs.desired }}" ] && echo "Done!" && break
+            sleep 30
+          done
+          kubectl get nodes
+
+      - name: Final pod status
+        run: kubectl get pods -n prod -o wide
