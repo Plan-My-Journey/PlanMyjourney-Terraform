@@ -22,22 +22,57 @@ jobs:
       - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
       - name: Pod status
         run: kubectl get pods -n prod
-      - name: travel-service logs
+
+      - name: Test endpoints via port-forward
         run: |
-          echo "=== travel-service logs ==="
-          kubectl logs -n prod -l app.kubernetes.io/name=travel-service --tail=50 --all-containers 2>/dev/null || echo "No logs"
-      - name: ai-service logs
-        run: |
-          echo "=== ai-service logs ==="
-          kubectl logs -n prod -l app.kubernetes.io/name=ai-service --tail=50 --all-containers 2>/dev/null || echo "No logs"
-      - name: Test trips endpoint directly
-        run: |
-          echo "=== Testing POST /trips via port-forward ==="
-          kubectl port-forward -n prod svc/travel-service 8001:80 &
-          sleep 3
-          curl -s -X POST http://localhost:8001/trips \
+          echo "=== Step 1: Get real JWT from user-service ==="
+          kubectl port-forward -n prod svc/user-service 8001:8000 &
+          sleep 4
+          LOGIN_RESP=$(curl -s -X POST http://localhost:8001/auth/login \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer test" \
-            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples"],"status":"planned"}' \
-            -w "\nHTTP Status: %{http_code}" || echo "port-forward test failed"
+            -d '{"email":"preethikgowda26@gmail.com","password":"Preethigowda@26"}')
+          HTTP_LOGIN=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8001/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"preethikgowda26@gmail.com","password":"Preethigowda@26"}')
+          JWT=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token','NO_TOKEN'))" 2>/dev/null || echo "PARSE_ERROR")
+          echo "Login HTTP: $HTTP_LOGIN"
+          echo "JWT starts with: ${JWT:0:50}"
           kill %1 2>/dev/null || true
+          sleep 2
+
+          echo ""
+          echo "=== Step 2: Test POST /trips on travel-service ==="
+          kubectl port-forward -n prod svc/travel-service 8002:8000 &
+          sleep 4
+          TRIPS_HTTP=$(curl -s -o /tmp/trips_resp.txt -w "%{http_code}" -X POST http://localhost:8002/trips \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples"],"status":"planned"}')
+          echo "POST /trips HTTP: $TRIPS_HTTP"
+          echo "Response body:"
+          cat /tmp/trips_resp.txt
+          kill %2 2>/dev/null || true
+          sleep 2
+
+          echo ""
+          echo "=== Step 3: Test POST /ai/itinerary on ai-service ==="
+          kubectl port-forward -n prod svc/ai-service 8003:8000 &
+          sleep 4
+          AI_HTTP=$(curl -s -o /tmp/ai_resp.txt -w "%{http_code}" -X POST http://localhost:8003/ai/itinerary \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples"],"status":"planned"}' \
+            --max-time 30)
+          echo "POST /ai/itinerary HTTP: $AI_HTTP"
+          echo "Response body:"
+          cat /tmp/ai_resp.txt | head -30
+
+      - name: travel-service recent logs
+        run: |
+          echo "=== travel-service logs after test ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=travel-service --tail=30 --all-containers 2>/dev/null
+
+      - name: ai-service recent logs
+        run: |
+          echo "=== ai-service logs after test ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=ai-service --tail=30 --all-containers 2>/dev/null
