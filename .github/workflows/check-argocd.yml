@@ -1,0 +1,38 @@
+name: Check ArgoCD Access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+      - name: ArgoCD service and pods
+        run: |
+          echo "=== ArgoCD Service ==="
+          kubectl get svc -n argocd argocd-server -o wide 2>/dev/null || kubectl get svc -n argocd 2>/dev/null
+          echo ""
+          echo "=== ArgoCD Pods ==="
+          kubectl get pods -n argocd
+          echo ""
+          echo "=== ArgoCD Server External Hostname ==="
+          kubectl get svc -n argocd argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "No external hostname"
+          echo ""
+          echo "=== Route53 / DNS check for argocd.invest-iq.online ==="
+          nslookup argocd.invest-iq.online 2>/dev/null || echo "DNS lookup failed"
+          echo ""
+          echo "=== HTTP check ==="
+          curl -s -o /dev/null -w "HTTP status: %{http_code}\n" --max-time 10 http://argocd.invest-iq.online 2>/dev/null || echo "Not reachable via subdomain"
