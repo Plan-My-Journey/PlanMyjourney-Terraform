@@ -1,0 +1,70 @@
+name: Diagnose AI Service
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Check ArgoCD sync and pod ConfigMap env vars
+        run: |
+          echo "=== ai-service pods ==="
+          kubectl get pods -n prod -l app.kubernetes.io/name=ai-service
+          echo ""
+          echo "=== ConfigMap in cluster ==="
+          kubectl get configmap -n prod -l app.kubernetes.io/name=ai-service -o yaml 2>/dev/null | grep -A 30 "data:"
+          echo ""
+          echo "=== BEDROCK_MAX_TOKENS from running pod env ==="
+          POD=$(kubectl get pod -n prod -l app.kubernetes.io/name=ai-service -o jsonpath='{.items[0].metadata.name}')
+          echo "Pod: $POD"
+          kubectl exec -n prod $POD -- env 2>/dev/null | grep -E "BEDROCK|ASYNC|TOKEN" || echo "Could not exec into pod"
+
+      - name: Test itinerary response content
+        run: |
+          echo "=== Get JWT ==="
+          kubectl port-forward -n prod svc/user-service 8001:8000 &
+          sleep 4
+          JWT=$(curl -s -X POST http://localhost:8001/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"${{ secrets.TEST_USER_EMAIL }}","password":"${{ secrets.TEST_USER_PASSWORD }}"}' \
+            | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+          if [ -z "$JWT" ]; then
+            JWT=$(curl -s -X POST http://localhost:8001/auth/login \
+              -H "Content-Type: application/json" \
+              -d '{"email":"aswinsatheesh03@gmail.com","password":"Admin@123"}' \
+              | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+          fi
+          echo "JWT: ${JWT:0:20}..."
+
+          echo ""
+          echo "=== POST /ai/itinerary (Varkala) ==="
+          kubectl port-forward -n prod svc/ai-service 8003:8000 &
+          sleep 4
+          curl -s -X POST http://localhost:8003/ai/itinerary \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d '{"destination":"Varkala","budget":3000,"days":3,"interests":["beach","culture"],"status":"planned"}' \
+            --max-time 90 | head -c 3000
+          echo ""
+
+      - name: Force rollout restart if ConfigMap not picked up
+        run: |
+          echo "=== Force rollout restart to pick up latest ConfigMap ==="
+          kubectl rollout restart deployment/ai-service -n prod
+          kubectl rollout status deployment/ai-service -n prod --timeout=120s
+          echo "Restart done"
