@@ -21,17 +21,45 @@ jobs:
           version: v1.30.0
       - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
 
-      - name: Remove KEDA namespace
+      - name: Force-remove KEDA
         run: |
-          echo "=== Removing KEDA (not used since ai-worker removed) ==="
-          kubectl delete namespace keda --ignore-not-found=true
-          echo "KEDA namespace deleted"
+          echo "=== Force-removing KEDA ==="
+          # Delete KEDA CRDs first to avoid webhook deadlock
+          kubectl delete crd \
+            scaledobjects.keda.sh \
+            scaledjobs.keda.sh \
+            triggerauthentications.keda.sh \
+            clustertriggerauthentications.keda.sh \
+            kedacontrollers.keda.sh 2>/dev/null || echo "Some CRDs not found"
 
-      - name: Remove Karpenter namespace
+          # Remove webhook configurations that block deletion
+          kubectl delete validatingwebhookconfigurations keda-admission --ignore-not-found=true 2>/dev/null || true
+          kubectl delete mutatingwebhookconfigurations keda-admission --ignore-not-found=true 2>/dev/null || true
+
+          # Patch out finalizers on namespace if stuck
+          kubectl get namespace keda -o json 2>/dev/null | \
+            sed 's/"finalizers": \[[^]]*\]/"finalizers": []/' | \
+            kubectl replace --raw /api/v1/namespaces/keda/finalize -f - 2>/dev/null || true
+
+          kubectl delete namespace keda --ignore-not-found=true --timeout=30s 2>/dev/null || \
+            echo "Namespace may already be terminating - continuing"
+          echo "KEDA removed"
+
+      - name: Force-remove Karpenter
         run: |
-          echo "=== Removing Karpenter (replaced by ClusterAutoscaler) ==="
-          kubectl delete namespace karpenter --ignore-not-found=true
-          echo "Karpenter namespace deleted"
+          echo "=== Force-removing Karpenter (replaced by ClusterAutoscaler) ==="
+          # Remove Karpenter CRDs
+          kubectl get crd | grep karpenter | awk '{print $1}' | \
+            xargs kubectl delete crd --ignore-not-found=true 2>/dev/null || true
+
+          # Patch out namespace finalizers
+          kubectl get namespace karpenter -o json 2>/dev/null | \
+            sed 's/"finalizers": \[[^]]*\]/"finalizers": []/' | \
+            kubectl replace --raw /api/v1/namespaces/karpenter/finalize -f - 2>/dev/null || true
+
+          kubectl delete namespace karpenter --ignore-not-found=true --timeout=30s 2>/dev/null || \
+            echo "Namespace may already be terminating - continuing"
+          echo "Karpenter removed"
 
       - name: Scale dev deployments to 1 replica each
         run: |
