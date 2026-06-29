@@ -65,7 +65,7 @@ resource "aws_eks_cluster" "main" {
 
 resource "aws_eks_node_group" "workers" {
   cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "${var.cluster_name}-workers"
+  node_group_name = "${var.cluster_name}-workers-v2"
   node_role_arn   = var.node_iam_role_arn
   subnet_ids      = var.private_subnet_ids
 
@@ -97,7 +97,8 @@ resource "aws_eks_node_group" "workers" {
   })
 
   lifecycle {
-    ignore_changes = [scaling_config[0].desired_size]
+    ignore_changes        = [scaling_config[0].desired_size]
+    create_before_destroy = true
   }
 }
 
