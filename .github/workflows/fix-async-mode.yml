@@ -1,0 +1,71 @@
+name: Fix ai-service Async Mode
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Show current ConfigMap
+        run: |
+          echo "=== Current ai-service ConfigMap ==="
+          kubectl get configmap ai-service -n prod -o yaml 2>/dev/null || kubectl get configmap -n prod | grep ai-service
+
+      - name: Patch ConfigMap to disable async
+        run: |
+          kubectl patch configmap ai-service -n prod \
+            --type merge \
+            -p '{"data":{"ASYNC_JOBS_ENABLED":"false"}}'
+          echo "Patched. Current value:"
+          kubectl get configmap ai-service -n prod -o jsonpath='{.data.ASYNC_JOBS_ENABLED}'
+
+      - name: Restart ai-service pods
+        run: |
+          kubectl rollout restart deployment/ai-service -n prod
+          kubectl rollout status deployment/ai-service -n prod --timeout=120s
+
+      - name: Test POST /ai/itinerary
+        run: |
+          echo "=== Get JWT ==="
+          kubectl port-forward -n prod svc/user-service 8001:8000 &
+          sleep 4
+          LOGIN_RESP=$(curl -s -X POST http://localhost:8001/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"preethikgowda26@gmail.com","password":"Preethigowda@26"}')
+          JWT=$(echo "$LOGIN_RESP" | node -e "const c=[];process.stdin.on('data',x=>c.push(x));process.stdin.on('end',()=>{const d=JSON.parse(c.join(''));console.log(d.access_token||'NO_TOKEN');});")
+          echo "JWT obtained: ${JWT:0:30}..."
+          kill %1 2>/dev/null || true
+          sleep 2
+
+          echo ""
+          echo "=== Test POST /ai/itinerary (expect 200 with itinerary, NOT 202) ==="
+          kubectl port-forward -n prod svc/ai-service 8003:8000 &
+          sleep 4
+          AI_HTTP=$(curl -s -o /tmp/ai_resp.txt -w "%{http_code}" -X POST http://localhost:8003/ai/itinerary \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples","food"],"status":"planned"}' \
+            --max-time 90)
+          echo "POST /ai/itinerary HTTP: $AI_HTTP"
+          echo "Response (first 500 chars):"
+          head -c 500 /tmp/ai_resp.txt
+          echo ""
+
+      - name: ai-service logs
+        run: |
+          kubectl logs -n prod -l app.kubernetes.io/name=ai-service --tail=20 --all-containers 2>/dev/null
