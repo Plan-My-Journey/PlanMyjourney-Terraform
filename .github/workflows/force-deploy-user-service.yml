@@ -1,0 +1,58 @@
+name: Force Deploy user-service v1.0.2 to Prod
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: patch user-service image
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Set user-service image to v1.0.2
+        run: |
+          ECR_IMAGE="235270183260.dkr.ecr.us-east-1.amazonaws.com/ai-travel/user-service:v1.0.2"
+          echo "Setting image: $ECR_IMAGE"
+          kubectl set image deployment/user-service \
+            user-service="$ECR_IMAGE" \
+            -n prod
+          echo "Image updated."
+
+      - name: Force ArgoCD refresh (if ArgoCD is running)
+        run: |
+          kubectl annotate application prod-user-service \
+            -n argocd \
+            argocd.argoproj.io/refresh=hard \
+            --overwrite 2>/dev/null || echo "ArgoCD app annotation skipped (ArgoCD may not be running)"
+
+      - name: Wait for rollout
+        run: |
+          echo "Waiting for user-service rollout..."
+          kubectl rollout status deployment/user-service -n prod --timeout=300s || true
+
+      - name: Final pod status and logs
+        run: |
+          echo "=== PODS ==="
+          kubectl get pods -n prod -o wide
+          echo ""
+          echo "=== user-service logs ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=user-service --tail=30 --all-containers 2>/dev/null || echo "No logs"
