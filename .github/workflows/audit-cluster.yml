@@ -1,0 +1,90 @@
+name: Audit Cluster - Pods and Nodes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: All EKS node groups
+        run: |
+          echo "=== EKS Node Groups ==="
+          aws eks list-nodegroups --cluster-name ai-travel-prod --output table
+          echo ""
+          echo "=== Node group details ==="
+          for ng in $(aws eks list-nodegroups --cluster-name ai-travel-prod --query 'nodegroups[]' --output text); do
+            echo "--- $ng ---"
+            aws eks describe-nodegroup --cluster-name ai-travel-prod --nodegroup-name "$ng" \
+              --query 'nodegroup.{Status:status,InstanceType:instanceTypes,Min:scalingConfig.minSize,Desired:scalingConfig.desiredSize,Max:scalingConfig.maxSize}' \
+              --output table
+          done
+
+      - name: All EC2 instances tagged to cluster
+        run: |
+          echo "=== EC2 instances for ai-travel-prod cluster ==="
+          aws ec2 describe-instances \
+            --filters "Name=tag:eks:cluster-name,Values=ai-travel-prod" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].{ID:InstanceId,Type:InstanceType,AZ:Placement.AvailabilityZone,NodeGroup:Tags[?Key==`eks:nodegroup-name`]|[0].Value,State:State.Name}' \
+            --output table
+
+      - name: Pods per namespace
+        run: |
+          echo "=== Pod count per namespace ==="
+          kubectl get pods --all-namespaces --no-headers | awk '{print $1}' | sort | uniq -c | sort -rn
+          echo ""
+          echo "=== All pods in prod namespace ==="
+          kubectl get pods -n prod -o wide
+          echo ""
+          echo "=== All pods in dev namespace ==="
+          kubectl get pods -n dev -o wide 2>/dev/null || echo "No dev namespace"
+
+      - name: HPAs across all namespaces
+        run: |
+          echo "=== All HPAs ==="
+          kubectl get hpa --all-namespaces 2>/dev/null || echo "No HPAs found"
+
+      - name: Deployments with replica counts
+        run: |
+          echo "=== Deployments in prod ==="
+          kubectl get deployments -n prod -o wide
+          echo ""
+          echo "=== Deployments in dev ==="
+          kubectl get deployments -n dev -o wide 2>/dev/null || echo "No dev deployments"
+          echo ""
+          echo "=== Deployments in kube-system ==="
+          kubectl get deployments -n kube-system -o wide 2>/dev/null
+
+      - name: Node resource usage
+        run: |
+          echo "=== Node capacity and allocatable ==="
+          kubectl get nodes -o custom-columns='NAME:.metadata.name,TYPE:.metadata.labels.node\.kubernetes\.io/instance-type,CPU:.status.allocatable.cpu,MEM:.status.allocatable.memory,PODS:.status.allocatable.pods,AZ:.metadata.labels.topology\.kubernetes\.io/zone'
+          echo ""
+          echo "=== Node top (resource usage) ==="
+          kubectl top nodes 2>/dev/null || echo "metrics-server not available"
+          echo ""
+          echo "=== Pod top in prod ==="
+          kubectl top pods -n prod 2>/dev/null || echo "metrics-server not available"
+
+      - name: Check for Karpenter provisioned nodes
+        run: |
+          echo "=== Nodes with Karpenter labels ==="
+          kubectl get nodes -l karpenter.sh/provisioner-name 2>/dev/null || echo "No Karpenter nodes found"
+          kubectl get nodes --show-labels | grep -i karpenter || echo "No Karpenter labels on any node"
+          echo ""
+          echo "=== All node labels summary ==="
+          kubectl get nodes -o custom-columns='NAME:.metadata.name,NODEGROUP:.metadata.labels.eks\.amazonaws\.com/nodegroup,INSTANCE:.metadata.labels.node\.kubernetes\.io/instance-type'
