@@ -1,0 +1,43 @@
+name: Check Service Logs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+      - name: Pod status
+        run: kubectl get pods -n prod
+      - name: travel-service logs
+        run: |
+          echo "=== travel-service logs ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=travel-service --tail=50 --all-containers 2>/dev/null || echo "No logs"
+      - name: ai-service logs
+        run: |
+          echo "=== ai-service logs ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=ai-service --tail=50 --all-containers 2>/dev/null || echo "No logs"
+      - name: Test trips endpoint directly
+        run: |
+          echo "=== Testing POST /trips via port-forward ==="
+          kubectl port-forward -n prod svc/travel-service 8001:80 &
+          sleep 3
+          curl -s -X POST http://localhost:8001/trips \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer test" \
+            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples"],"status":"planned"}' \
+            -w "\nHTTP Status: %{http_code}" || echo "port-forward test failed"
+          kill %1 2>/dev/null || true
