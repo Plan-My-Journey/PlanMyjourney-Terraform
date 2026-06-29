@@ -1,0 +1,75 @@
+name: Restart ai-service
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Show current service account annotation
+        run: |
+          echo "=== ai-service ServiceAccount annotation ==="
+          kubectl get serviceaccount ai-service -n prod -o jsonpath='{.metadata.annotations}' 2>/dev/null || \
+          kubectl get serviceaccount -n prod -l app.kubernetes.io/name=ai-service -o jsonpath='{.items[0].metadata.annotations}' 2>/dev/null || \
+          echo "SA not found"
+
+      - name: Force-restart ai-service pods
+        run: |
+          echo "Restarting ai-service deployment..."
+          kubectl rollout restart deployment/ai-service -n prod
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status deployment/ai-service -n prod --timeout=120s
+
+      - name: Show pod annotation (AWS_ROLE_ARN injected)
+        run: |
+          echo "=== New pod AWS_ROLE_ARN env var ==="
+          POD=$(kubectl get pods -n prod -l app.kubernetes.io/name=ai-service -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          echo "Pod: $POD"
+          kubectl get pod "$POD" -n prod -o jsonpath='{.spec.containers[0].env}' 2>/dev/null | python3 -c "import sys,json; envs=json.load(sys.stdin); [print(e['name'],'=',e.get('value','')) for e in envs if 'AWS' in e['name']]" 2>/dev/null || echo "Could not read env"
+          kubectl get pod "$POD" -n prod -o jsonpath='{.metadata.annotations}' 2>/dev/null
+
+      - name: Test ai/itinerary endpoint
+        run: |
+          echo "=== Get JWT ==="
+          kubectl port-forward -n prod svc/user-service 8001:8000 &
+          sleep 4
+          LOGIN_RESP=$(curl -s -X POST http://localhost:8001/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"preethikgowda26@gmail.com","password":"Preethigowda@26"}')
+          JWT=$(echo "$LOGIN_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token','NO_TOKEN'))" 2>/dev/null || echo "PARSE_ERROR")
+          echo "JWT obtained: ${JWT:0:30}..."
+          kill %1 2>/dev/null || true
+          sleep 2
+
+          echo ""
+          echo "=== Test POST /ai/itinerary ==="
+          kubectl port-forward -n prod svc/ai-service 8003:8000 &
+          sleep 4
+          AI_HTTP=$(curl -s -o /tmp/ai_resp.txt -w "%{http_code}" -X POST http://localhost:8003/ai/itinerary \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $JWT" \
+            -d '{"destination":"Kyoto","budget":2200,"days":5,"interests":["temples"],"status":"planned"}' \
+            --max-time 60)
+          echo "POST /ai/itinerary HTTP: $AI_HTTP"
+          echo "Response:"
+          cat /tmp/ai_resp.txt | head -50
+
+      - name: ai-service logs
+        run: |
+          echo "=== ai-service logs ==="
+          kubectl logs -n prod -l app.kubernetes.io/name=ai-service --tail=30 --all-containers 2>/dev/null
