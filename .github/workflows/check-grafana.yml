@@ -1,0 +1,70 @@
+name: Check Grafana Status
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Monitoring namespace pods and services
+        run: |
+          echo "=== Pods in monitoring namespace ==="
+          kubectl get pods -n monitoring 2>/dev/null || echo "monitoring namespace not found"
+          echo ""
+          echo "=== Services in monitoring namespace ==="
+          kubectl get svc -n monitoring 2>/dev/null || echo "no services"
+          echo ""
+          echo "=== Grafana service details ==="
+          kubectl get svc monitoring-grafana -n monitoring -o wide 2>/dev/null || echo "monitoring-grafana service not found"
+
+      - name: Check grafana-admin secret
+        run: |
+          echo "=== grafana-admin secret ==="
+          kubectl get secret grafana-admin -n monitoring 2>/dev/null && echo "EXISTS" || echo "NOT FOUND"
+          echo ""
+          echo "=== All secrets in monitoring ==="
+          kubectl get secrets -n monitoring 2>/dev/null | head -20
+
+      - name: Check HTTPRoute for grafana
+        run: |
+          echo "=== Grafana HTTPRoute ==="
+          kubectl get httproute grafana-route -n monitoring -o yaml 2>/dev/null || echo "HTTPRoute not found"
+
+      - name: Check DNS and HTTP for grafana.invest-iq.online
+        run: |
+          echo "=== DNS for grafana.invest-iq.online ==="
+          nslookup grafana.invest-iq.online 2>/dev/null || echo "DNS not resolved"
+          echo ""
+          echo "=== HTTP check ==="
+          curl -s -o /dev/null -w "HTTP status: %{http_code}\n" --max-time 10 http://grafana.invest-iq.online || echo "Not reachable"
+          echo ""
+          echo "=== HTTPS check ==="
+          curl -sk -o /dev/null -w "HTTPS status: %{http_code}\n" --max-time 10 https://grafana.invest-iq.online || echo "Not reachable via HTTPS"
+
+      - name: Get grafana admin password
+        run: |
+          echo "=== Grafana admin password ==="
+          kubectl get secret grafana-admin -n monitoring \
+            -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d && echo "" || \
+          kubectl get secret monitoring-grafana -n monitoring \
+            -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d && echo "" || \
+          echo "Could not retrieve password"
+          echo ""
+          echo "=== Admin user ==="
+          kubectl get secret grafana-admin -n monitoring \
+            -o jsonpath='{.data.admin-user}' 2>/dev/null | base64 -d && echo "" || echo "N/A"
