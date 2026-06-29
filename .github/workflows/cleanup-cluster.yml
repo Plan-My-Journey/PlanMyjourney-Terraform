@@ -48,17 +48,37 @@ jobs:
       - name: Force-remove Karpenter
         run: |
           echo "=== Force-removing Karpenter (replaced by ClusterAutoscaler) ==="
-          # Remove Karpenter CRDs
-          kubectl get crd | grep karpenter | awk '{print $1}' | \
-            xargs kubectl delete crd --ignore-not-found=true 2>/dev/null || true
+          # Remove all Karpenter resources and their finalizers
+          for resource in $(kubectl get crd | grep karpenter | awk '{print $1}'); do
+            echo "Removing finalizers from all $resource objects..."
+            kubectl get "$resource" --all-namespaces -o json 2>/dev/null | \
+              node -e "
+const c=[];process.stdin.on('data',x=>c.push(x));process.stdin.on('end',()=>{
+  try {
+    const d=JSON.parse(c.join(''));
+    d.items.forEach(i=>console.log(i.metadata.namespace||'cluster',i.metadata.name));
+  } catch(e) {}
+});" | while read ns name; do
+              kubectl patch "$resource" "$name" -n "$ns" --type=json \
+                -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || true
+            done
+            kubectl delete crd "$resource" --ignore-not-found=true 2>/dev/null || true
+          done
 
-          # Patch out namespace finalizers
+          # Remove all resources in karpenter namespace
+          kubectl delete all --all -n karpenter --grace-period=0 --force 2>/dev/null || true
+
+          # Start deletion
+          kubectl delete namespace karpenter --ignore-not-found=true &
+          sleep 5
+
+          # Patch finalizers out of the terminating namespace
           kubectl get namespace karpenter -o json 2>/dev/null | \
-            sed 's/"finalizers": \[[^]]*\]/"finalizers": []/' | \
-            kubectl replace --raw /api/v1/namespaces/karpenter/finalize -f - 2>/dev/null || true
+            node -e "
+const c=[];process.stdin.on('data',x=>c.push(x));process.stdin.on('end',()=>{
+  try{const d=JSON.parse(c.join(''));d.spec.finalizers=[];process.stdout.write(JSON.stringify(d));}catch(e){}
+});" | kubectl replace --raw /api/v1/namespaces/karpenter/finalize -f - 2>/dev/null || true
 
-          kubectl delete namespace karpenter --ignore-not-found=true --timeout=30s 2>/dev/null || \
-            echo "Namespace may already be terminating - continuing"
           echo "Karpenter removed"
 
       - name: Scale dev deployments to 1 replica each
