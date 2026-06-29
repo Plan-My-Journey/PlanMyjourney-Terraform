@@ -36,3 +36,7 @@ jobs:
           echo ""
           echo "=== HTTP check ==="
           curl -s -o /dev/null -w "HTTP status: %{http_code}\n" --max-time 10 http://argocd.invest-iq.online 2>/dev/null || echo "Not reachable via subdomain"
+          echo ""
+          echo "=== ArgoCD Admin Password ==="
+          kubectl get secret argocd-initial-admin-secret -n argocd \
+            -o jsonpath='{.data.password}' 2>/dev/null | base64 -d && echo "" || echo "Secret not found (password may have been changed)"
