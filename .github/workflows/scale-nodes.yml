@@ -35,11 +35,19 @@ jobs:
 
       - name: Scale node group
         run: |
+          # Try workers-v2 first (current group), fall back to workers (legacy)
           ASG_NAME=$(aws eks describe-nodegroup \
             --cluster-name ai-travel-prod \
-            --nodegroup-name ai-travel-prod-workers \
+            --nodegroup-name ai-travel-prod-workers-v2 \
             --query 'nodegroup.resources.autoScalingGroups[0].name' \
-            --output text)
+            --output text 2>/dev/null) || true
+          if [ -z "$ASG_NAME" ] || [ "$ASG_NAME" = "None" ]; then
+            ASG_NAME=$(aws eks describe-nodegroup \
+              --cluster-name ai-travel-prod \
+              --nodegroup-name ai-travel-prod-workers \
+              --query 'nodegroup.resources.autoScalingGroups[0].name' \
+              --output text)
+          fi
           echo "ASG: $ASG_NAME"
           aws autoscaling update-auto-scaling-group \
             --auto-scaling-group-name "$ASG_NAME" \
@@ -47,16 +55,16 @@ jobs:
             --max-size 6
           echo "Scaled to ${{ inputs.desired }} desired nodes."
 
-      - name: Wait for new node
+      - name: Wait for new nodes
         run: |
           echo "Waiting for nodes to be Ready..."
           for i in $(seq 1 20); do
-            READY=$(kubectl get nodes --no-headers | grep -c " Ready " || true)
-            echo "  Ready: $READY"
+            READY=$(kubectl get nodes --no-headers | grep " Ready " | wc -l || echo 0)
+            echo "  Ready nodes: $READY / ${{ inputs.desired }}"
             [ "$READY" -ge "${{ inputs.desired }}" ] && echo "Done!" && break
             sleep 30
           done
-          kubectl get nodes
+          kubectl get nodes -o wide
 
       - name: Final pod status
         run: kubectl get pods -n prod -o wide
