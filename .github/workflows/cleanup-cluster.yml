@@ -1,0 +1,74 @@
+name: Cleanup Cluster - Remove KEDA, Karpenter, Scale Down Dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+
+      - name: Remove KEDA namespace
+        run: |
+          echo "=== Removing KEDA (not used since ai-worker removed) ==="
+          kubectl delete namespace keda --ignore-not-found=true
+          echo "KEDA namespace deleted"
+
+      - name: Remove Karpenter namespace
+        run: |
+          echo "=== Removing Karpenter (replaced by ClusterAutoscaler) ==="
+          kubectl delete namespace karpenter --ignore-not-found=true
+          echo "Karpenter namespace deleted"
+
+      - name: Scale dev deployments to 1 replica each
+        run: |
+          echo "=== Scaling dev namespace to 1 replica per service ==="
+          for deploy in ai-service frontend travel-service user-service utility-service ai-worker; do
+            kubectl scale deployment/$deploy -n dev --replicas=1 2>/dev/null && echo "Scaled $deploy to 1" || echo "Skipped $deploy (not found)"
+          done
+
+      - name: Scale node group from 6 to 4
+        run: |
+          echo "=== Scaling node group down to 4 desired ==="
+          ASG_NAME=$(aws eks describe-nodegroup \
+            --cluster-name ai-travel-prod \
+            --nodegroup-name ai-travel-prod-workers-v2 \
+            --query 'nodegroup.resources.autoScalingGroups[0].name' \
+            --output text)
+          echo "ASG: $ASG_NAME"
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name "$ASG_NAME" \
+            --desired-capacity 4 \
+            --min-size 2 \
+            --max-size 6
+          echo "Scaled to 4 desired nodes"
+
+      - name: Wait and show pod counts
+        run: |
+          echo "Waiting 30s for pods to settle..."
+          sleep 30
+          echo ""
+          echo "=== Pod count per namespace ==="
+          kubectl get pods --all-namespaces --no-headers | awk '{print $1}' | sort | uniq -c | sort -rn
+          echo ""
+          echo "=== Node status ==="
+          kubectl get nodes -o wide
+          echo ""
+          echo "=== Prod pods ==="
+          kubectl get pods -n prod
+          echo ""
+          echo "=== Dev pods ==="
+          kubectl get pods -n dev
