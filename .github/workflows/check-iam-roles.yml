@@ -1,0 +1,42 @@
+name: Check IAM Roles for ai-service
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+      - name: Check IAM roles
+        run: |
+          echo "=== Roles with 'ai-service' in name ==="
+          aws iam list-roles --query "Roles[?contains(RoleName,'ai-service')].{Name:RoleName,ARN:Arn}" --output table
+
+          echo ""
+          echo "=== Check ai-travel-ai-service-irsa ==="
+          aws iam get-role --role-name ai-travel-ai-service-irsa 2>/dev/null \
+            && echo "EXISTS" || echo "NOT FOUND"
+
+          echo ""
+          echo "=== Check ai-travel-ai-service-prod ==="
+          aws iam get-role --role-name ai-travel-ai-service-prod 2>/dev/null \
+            && echo "EXISTS" || echo "NOT FOUND"
+
+          echo ""
+          echo "=== ai-service service account annotation in prod namespace ==="
+          kubectl get serviceaccount -n prod -l app.kubernetes.io/name=ai-service -o jsonpath='{.items[0].metadata.annotations}' 2>/dev/null || echo "SA not found by label"
+          kubectl get serviceaccount ai-service -n prod -o jsonpath='{.metadata.annotations}' 2>/dev/null || echo "SA not found by name"
+          echo ""
