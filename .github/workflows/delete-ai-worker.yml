@@ -1,0 +1,30 @@
+name: Delete ai-worker from cluster
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: us-east-1
+      - uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.0
+      - run: aws eks update-kubeconfig --region us-east-1 --name ai-travel-prod
+      - name: Delete ai-worker deployment and service
+        run: |
+          kubectl delete deployment/ai-worker -n prod --ignore-not-found
+          kubectl delete service/ai-worker -n prod --ignore-not-found
+          kubectl delete serviceaccount/ai-worker -n prod --ignore-not-found
+          kubectl delete configmap/ai-worker -n prod --ignore-not-found
+          echo "ai-worker resources deleted"
+          kubectl get pods -n prod
